@@ -14,8 +14,7 @@ services:
       retries: 5
 
   backend:
-    build:
-      context: ./seqproject-backend
+    image: moosaa95/seq-backend:latest
     env_file:
       - ./envs/.env
     depends_on:
@@ -25,8 +24,7 @@ services:
       - "8000"
 
   frontend:
-    build:
-      context: ./seqproject-frontend
+    image: moosaa95/seq-frontend:latest
     env_file:
       - ./envs/.env
     depends_on:
