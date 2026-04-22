@@ -184,7 +184,9 @@ class EmailNotificationService:
     @classmethod
     def send_booking_confirmation(cls, booking) -> bool:
         """Send booking confirmation email to customer"""
-        subject = f"Booking Confirmation - {booking.property.title}"
+        apt = booking.apartment
+        apt_location = apt.parent_property.location.name if apt.parent_property and apt.parent_property.location else ''
+        subject = f"Booking Confirmation - {apt.title}"
 
         html_content = f"""
         <!DOCTYPE html>
@@ -225,9 +227,9 @@ class EmailNotificationService:
 
                     <div class="property-info">
                         <h3>Property Details</h3>
-                        <p><strong>{booking.property.title}</strong></p>
-                        <p>{booking.property.location}</p>
-                        <p>{booking.property.bedrooms} Bedrooms • {booking.property.bathrooms} Bathrooms</p>
+                        <p><strong>{apt.title}</strong></p>
+                        <p>{apt_location}</p>
+                        <p>{apt.bedrooms} Bedrooms • {apt.bathrooms} Bathrooms</p>
                     </div>
 
                     <div class="field">
@@ -253,7 +255,9 @@ class EmailNotificationService:
     @classmethod
     def send_booking_admin_notification(cls, booking) -> bool:
         """Send booking notification to admin"""
-        subject = f"New Booking: {booking.property.title}"
+        apt = booking.apartment
+        apt_location = apt.parent_property.location.name if apt.parent_property and apt.parent_property.location else ''
+        subject = f"New Booking: {apt.title}"
 
         html_content = f"""
         <!DOCTYPE html>
@@ -279,7 +283,7 @@ class EmailNotificationService:
                     <h3>Booking #{booking.booking_id}</h3>
                     <div class="field">
                         <div class="label">Property:</div>
-                        <div class="value">{booking.property.title} - {booking.property.location}</div>
+                        <div class="value">{apt.title} - {apt_location}</div>
                     </div>
                     <div class="field">
                         <div class="label">Guest Name:</div>
@@ -326,6 +330,8 @@ class EmailNotificationService:
     def send_payment_confirmation(cls, payment) -> bool:
         """Send payment confirmation email to customer"""
         booking = payment.booking
+        apt = booking.apartment
+        apt_location = apt.parent_property.location.name if apt.parent_property and apt.parent_property.location else ''
         subject = f"Payment Confirmed - Booking {booking.booking_id}"
 
         html_content = f"""
@@ -367,8 +373,8 @@ class EmailNotificationService:
 
                     <h3>Booking Information</h3>
                     <p><strong>Booking ID:</strong> {booking.booking_id}</p>
-                    <p><strong>Property:</strong> {booking.property.title}</p>
-                    <p><strong>Location:</strong> {booking.property.location}</p>
+                    <p><strong>Property:</strong> {apt.title}</p>
+                    <p><strong>Location:</strong> {apt_location}</p>
                     <p><strong>Check-in:</strong> {booking.check_in.strftime('%B %d, %Y')}</p>
                     <p><strong>Check-out:</strong> {booking.check_out.strftime('%B %d, %Y')}</p>
 

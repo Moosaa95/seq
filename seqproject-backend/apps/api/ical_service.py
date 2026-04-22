@@ -42,7 +42,7 @@ class ICalService:
 
         # Add all confirmed and pending bookings
         bookings = Booking.objects.filter(
-            property=property_obj,
+            apartment=property_obj,
             status__in=['pending', 'confirmed', 'completed']
         ).exclude(
             status='cancelled'
@@ -107,7 +107,7 @@ Payment Status: {booking.payment_status}
             cal.add_component(event)
 
         # Add blocked dates
-        blocked_dates = BlockedDate.objects.filter(property=property_obj)
+        blocked_dates = BlockedDate.objects.filter(apartment=property_obj)
 
         for blocked in blocked_dates:
             event = Event()
@@ -209,7 +209,7 @@ Payment Status: {booking.payment_status}
 
                     # Check if this blocked date already exists
                     existing_blocked = BlockedDate.objects.filter(
-                        property=external_calendar.property,
+                        apartment=external_calendar.apartment,
                         external_calendar=external_calendar,
                         source_booking_id=uid
                     ).first()
@@ -226,7 +226,7 @@ Payment Status: {booking.payment_status}
                     else:
                         # Create new blocked date
                         BlockedDate.objects.create(
-                            property=external_calendar.property,
+                            apartment=external_calendar.apartment,
                             external_calendar=external_calendar,
                             start_date=start_date,
                             end_date=end_date,
@@ -313,7 +313,7 @@ Payment Status: {booking.payment_status}
         """
         # Check regular bookings
         overlapping_bookings = Booking.objects.filter(
-            property=property_obj,
+            apartment=property_obj,
             status__in=['pending', 'confirmed']
         ).filter(
             check_in__lt=check_out,
@@ -325,7 +325,7 @@ Payment Status: {booking.payment_status}
 
         # Check blocked dates
         overlapping_blocked = BlockedDate.objects.filter(
-            property=property_obj
+            apartment=property_obj
         ).filter(
             start_date__lt=check_out,
             end_date__gt=check_in

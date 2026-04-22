@@ -63,7 +63,7 @@ class PaystackService:
             "callback_url": self.callback_url,
             "metadata": {
                 "booking_id": str(booking.booking_id),
-                "property_title": booking.property.title,
+                "property_title": booking.apartment.title,
                 "customer_name": booking.name,
                 "check_in": str(booking.check_in),
                 "check_out": str(booking.check_out),

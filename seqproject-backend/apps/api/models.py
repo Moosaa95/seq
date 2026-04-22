@@ -186,7 +186,7 @@ class Apartment(ModelMixins):
 
     def __str__(self):
         prefix = f"{self.parent_property.name} - " if self.parent_property else ""
-        return f"{prefix}{self.title} - {self.location}"
+        return f"{prefix}{self.title}"
 
     @property
     def is_available(self):
@@ -524,7 +524,9 @@ class Location(ModelMixins):
 
     name = models.CharField(max_length=255, unique=True)  # e.g., "Wuse", "Maitama"
     address = models.TextField(blank=True, null=True)
-    state = models.ForeignKey(State, on_delete=models.SET_NULL, null=True, related_name="locations")
+    state = models.CharField(max_length=100, blank=True, null=True)
+    lga = models.CharField(max_length=100, blank=True, null=True)
+    country = models.CharField(max_length=100, blank=True, null=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:

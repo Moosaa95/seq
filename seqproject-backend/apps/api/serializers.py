@@ -52,13 +52,6 @@ class LocationSerializer(serializers.ModelSerializer):
     """Serializer for Location model"""
 
     inventory_count = serializers.SerializerMethodField()
-    state_details = StateSerializer(source="state", read_only=True)
-    state_id = serializers.PrimaryKeyRelatedField(
-        queryset=State.objects.all(), source="state", write_only=True, required=False, allow_null=True
-    )
-    # Helper fields to flatten the response for simpler frontend consumption
-    state_name = serializers.CharField(source="state.name", read_only=True)
-    country_name = serializers.CharField(source="state.country.name", read_only=True)
 
     class Meta:
         model = Location
@@ -66,10 +59,9 @@ class LocationSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "address",
-            "state_id",
-            "state_details",
-            "state_name",
-            "country_name",
+            "state",
+            "lga",
+            "country",
             "is_active",
             "inventory_count",
             "created_at",
@@ -325,11 +317,13 @@ class ApartmentListSerializer(serializers.ModelSerializer):
     property_details = PropertyListSerializer(source="parent_property", read_only=True)
     primary_image = serializers.SerializerMethodField()
     location = serializers.CharField(source="parent_property.location.name", read_only=True)
+    is_available = serializers.ReadOnlyField()
 
     class Meta:
         model = Apartment
         fields = [
             "id",
+            "parent_property",
             "property_details",
             "title",
             "location",
@@ -340,8 +334,13 @@ class ApartmentListSerializer(serializers.ModelSerializer):
             "type",
             "bedrooms",
             "bathrooms",
+            "living_rooms",
             "guests",
+            "description",
+            "amenities",
             "featured",
+            "is_active",
+            "is_available",
             "primary_image",
             "agent",
         ]

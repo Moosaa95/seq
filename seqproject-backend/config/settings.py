@@ -344,11 +344,16 @@ import cloudinary
 
 # Configure Cloudinary SDK
 cloudinary.config(
-    cloud_name=config("CLOUDINARY_CLOUD_NAME", default=""),
-    api_key=config("CLOUDINARY_API_KEY", default=""),
-    api_secret=config("CLOUDINARY_API_SECRET", default=""),
+    cloud_name=config("CLOUDINARY_CLOUD_NAME", default="dr7horthg"),
+    api_key=config("CLOUDINARY_API_KEY", default="373118866994752"),
+    api_secret=config("CLOUDINARY_API_SECRET", default="j6vH5WtMF0_wQgSGzqikX-HOLxs"),
     secure=True,
 )
+
+# CLOUDINARY_CLOUD_NAME="dr7horthg"
+# CLOUDINARY_API_KEY="373118866994752"
+# CLOUDINARY_API_SECRET="j6vH5WtMF0_wQgSGzqikX-HOLxs"
+
 
 # Set Cloudinary as the default file storage (Migrated to STORAGES)
 # DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
