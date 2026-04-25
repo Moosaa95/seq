@@ -305,6 +305,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)
 
+        # Only staff and superusers may access the admin
+        if not (self.user.is_staff or self.user.is_superuser):
+            raise serializers.ValidationError(
+                {'detail': 'You do not have permission to access the admin panel.'}
+            )
+
         # Add custom claims including role and permissions
         data['user'] = {
             'id': str(self.user.id),

@@ -705,14 +705,17 @@ class ExternalCalendarViewSet(viewsets.ModelViewSet):
     ordering = ["-created_at"]
 
     def get_queryset(self):
-        """Filter by property ID (accepts both 'property' and 'property_id' params)"""
+        """Filter by apartment ID (accepts apartment/property aliases for compatibility)."""
         queryset = super().get_queryset()
 
-        # Accept both property_id and property as filter params for flexibility
-        property_id = self.request.query_params.get("property_id") or \
-                      self.request.query_params.get("property")
-        if property_id:
-            queryset = queryset.filter(property_id=property_id)
+        apartment_id = (
+            self.request.query_params.get("apartment_id")
+            or self.request.query_params.get("apartment")
+            or self.request.query_params.get("property_id")
+            or self.request.query_params.get("property")
+        )
+        if apartment_id:
+            queryset = queryset.filter(apartment_id=apartment_id)
 
         return queryset
 

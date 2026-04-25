@@ -12,19 +12,19 @@ from typing import List, Dict, Optional
 import requests
 from django.utils import timezone
 from icalendar import Calendar, Event, vCalAddress, vText
-from .models import Property, Booking, ExternalCalendar, BlockedDate
+from .models import Apartment, Booking, ExternalCalendar, BlockedDate
 
 
 class ICalService:
     """Service for iCal calendar operations"""
 
     @staticmethod
-    def export_property_calendar(property_obj: Property) -> str:
+    def export_property_calendar(apartment_obj: Apartment) -> str:
         """
         Export all bookings for a property as an iCal feed.
 
         Args:
-            property_obj: Property instance
+            apartment_obj: Apartment instance
 
         Returns:
             iCal formatted string
@@ -36,13 +36,13 @@ class ICalService:
         cal.add('version', '2.0')
         cal.add('calscale', 'GREGORIAN')
         cal.add('method', 'PUBLISH')
-        cal.add('x-wr-calname', f'{property_obj.title} - Bookings')
+        cal.add('x-wr-calname', f'{apartment_obj.title} - Bookings')
         cal.add('x-wr-timezone', 'UTC')
-        cal.add('x-wr-caldesc', f'Booking calendar for {property_obj.title}')
+        cal.add('x-wr-caldesc', f'Booking calendar for {apartment_obj.title}')
 
         # Add all confirmed and pending bookings
         bookings = Booking.objects.filter(
-            apartment=property_obj,
+            apartment=apartment_obj,
             status__in=['pending', 'confirmed', 'completed']
         ).exclude(
             status='cancelled'
@@ -107,7 +107,7 @@ Payment Status: {booking.payment_status}
             cal.add_component(event)
 
         # Add blocked dates
-        blocked_dates = BlockedDate.objects.filter(apartment=property_obj)
+        blocked_dates = BlockedDate.objects.filter(apartment=apartment_obj)
 
         for blocked in blocked_dates:
             event = Event()
@@ -287,7 +287,7 @@ Payment Status: {booking.payment_status}
         for ext_cal in external_calendars:
             result = ICalService.import_external_calendar(ext_cal)
             results.append({
-                'property': ext_cal.property.title,
+                'apartment': ext_cal.apartment.title if ext_cal.apartment else "Unknown apartment",
                 'source': ext_cal.get_source_display(),
                 'result': result
             })
@@ -296,7 +296,7 @@ Payment Status: {booking.payment_status}
 
     @staticmethod
     def check_availability_with_blocked_dates(
-        property_obj: Property,
+        apartment_obj: Apartment,
         check_in: datetime.date,
         check_out: datetime.date
     ) -> bool:
@@ -304,7 +304,7 @@ Payment Status: {booking.payment_status}
         Check if property is available considering both bookings and blocked dates.
 
         Args:
-            property_obj: Property instance
+            apartment_obj: Apartment instance
             check_in: Check-in date
             check_out: Check-out date
 
@@ -313,7 +313,7 @@ Payment Status: {booking.payment_status}
         """
         # Check regular bookings
         overlapping_bookings = Booking.objects.filter(
-            apartment=property_obj,
+            apartment=apartment_obj,
             status__in=['pending', 'confirmed']
         ).filter(
             check_in__lt=check_out,
@@ -325,7 +325,7 @@ Payment Status: {booking.payment_status}
 
         # Check blocked dates
         overlapping_blocked = BlockedDate.objects.filter(
-            apartment=property_obj
+            apartment=apartment_obj
         ).filter(
             start_date__lt=check_out,
             end_date__gt=check_in
