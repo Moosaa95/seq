@@ -216,15 +216,15 @@ class ResendOTPSerializer(serializers.Serializer):
 
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for user details with role info."""
-    
-    role_details = UserRoleListSerializer(source='role', read_only=True)
+
+    role = UserRoleListSerializer(read_only=True)
     permissions = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
-            'id', 'email', 'first_name', 'last_name', 'date_joined', 
-            'is_active', 'is_staff', 'is_superuser', 'role', 'role_details',
+            'id', 'email', 'first_name', 'last_name', 'date_joined',
+            'is_active', 'is_staff', 'is_superuser', 'role',
             'permissions', 'must_change_password'
         ]
         read_only_fields = ['id', 'date_joined', 'permissions', 'must_change_password']
@@ -321,8 +321,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'is_superuser': self.user.is_superuser,
             'must_change_password': self.user.must_change_password,
             'role': {
-                'id': str(self.user.role.id) if self.user.role else None,
-                'name': self.user.role.name if self.user.role else None,
+                'id': str(self.user.role.id),
+                'name': self.user.role.name,
+                'is_superuser_role': self.user.role.is_superuser_role,
             } if self.user.role else None,
             'permissions': self.user.get_permissions(),
         }

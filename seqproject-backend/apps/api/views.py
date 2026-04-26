@@ -44,7 +44,9 @@ from .serializers import (
 from .pagination import StandardResultsSetPagination
 from .paystack import get_paystack_service, PaystackService
 from .notifications import EmailNotificationService
-from .permissions import IsAdminOrStaff, IsAdminOrReadOnly
+from .permissions import IsAdminOrStaff, IsAdminOrReadOnly, MethodBasedPermission
+from apps.account.permissions import Permissions
+from rest_framework.permissions import IsAuthenticated as _IsAuthenticated
 from .authentication import CsrfExemptSessionAuthentication
 from .ical_service import ICalService
 from django.http import HttpResponse
@@ -92,13 +94,26 @@ class PropertyViewSet(viewsets.ModelViewSet):
 
     queryset = Property.objects.all()
     serializer_class = PropertySerializer
-    permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["location", "featured", "is_active"]
     search_fields = ["name", "description", "location__name"]
     ordering_fields = ["created_at", "name"]
     ordering = ["-featured", "-created_at"]
+
+    permission_map = {
+        'GET': Permissions.PROPERTY_READ,
+        'POST': Permissions.PROPERTY_CREATE,
+        'PUT': Permissions.PROPERTY_UPDATE,
+        'PATCH': Permissions.PROPERTY_UPDATE,
+        'DELETE': Permissions.PROPERTY_DELETE,
+    }
+
+    def get_permissions(self):
+        # Public read for the website; admin writes require role permission
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return [AllowAny()]
+        return [_IsAuthenticated(), MethodBasedPermission()]
 
     def get_serializer_class(self):
         if self.action == "list":
@@ -118,8 +133,20 @@ class ApartmentViewSet(viewsets.ModelViewSet):
     """
 
     queryset = Apartment.objects.filter(is_active=True)
-    permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardResultsSetPagination
+
+    permission_map = {
+        'GET': Permissions.PROPERTY_READ,
+        'POST': Permissions.PROPERTY_CREATE,
+        'PUT': Permissions.PROPERTY_UPDATE,
+        'PATCH': Permissions.PROPERTY_UPDATE,
+        'DELETE': Permissions.PROPERTY_DELETE,
+    }
+
+    def get_permissions(self):
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return [AllowAny()]
+        return [_IsAuthenticated(), MethodBasedPermission()]
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
@@ -262,18 +289,25 @@ class BookingViewSet(viewsets.ModelViewSet):
 
     queryset = Booking.objects.all()
     serializer_class = BookingSerializer
-    permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["status", "payment_status"]
     ordering_fields = ["created_at", "check_in", "check_out"]
     ordering = ["-created_at"]
     lookup_field = "booking_id"
 
+    permission_map = {
+        'GET': Permissions.BOOKING_READ,
+        'POST': Permissions.BOOKING_CREATE,
+        'PUT': Permissions.BOOKING_UPDATE,
+        'PATCH': Permissions.BOOKING_UPDATE,
+        'DELETE': Permissions.BOOKING_DELETE,
+    }
+
     def get_permissions(self):
-        """Allow anyone to create, admin to list/update"""
-        if self.action in ["list", "update", "partial_update", "destroy"]:
-            return [IsAdminOrStaff()]
-        return [AllowAny()]
+        # Anyone can create a booking (public website); admin operations need role permission
+        if self.action == "create":
+            return [AllowAny()]
+        return [_IsAuthenticated(), MethodBasedPermission()]
 
     def get_queryset(self):
         """Filter bookings by apartment or email"""
@@ -434,14 +468,21 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
-    permission_classes = [AllowAny]
     ordering = ["-created_at"]
 
+    permission_map = {
+        'GET': Permissions.PAYMENT_READ,
+        'POST': Permissions.PAYMENT_CREATE,
+        'PUT': Permissions.PAYMENT_REFUND,
+        'PATCH': Permissions.PAYMENT_REFUND,
+        'DELETE': Permissions.PAYMENT_REFUND,
+    }
+
     def get_permissions(self):
-        """Allow anyone to create, admin to list"""
-        if self.action == "list":
-            return [IsAdminOrStaff()]
-        return [AllowAny()]
+        # Public payment flows (initialize/verify/webhook) are AllowAny
+        if self.action in ("initialize", "verify", "config", "webhook"):
+            return [AllowAny()]
+        return [_IsAuthenticated(), MethodBasedPermission()]
 
     @action(detail=False, methods=["post"])
     def initialize(self, request):
@@ -540,14 +581,19 @@ class ContactInquiryViewSet(viewsets.ModelViewSet):
 
     queryset = ContactInquiry.objects.all()
     serializer_class = ContactInquirySerializer
-    permission_classes = [AllowAny]
     ordering = ["-created_at"]
 
+    permission_map = {
+        'GET': Permissions.INQUIRY_READ,
+        'PUT': Permissions.INQUIRY_UPDATE,
+        'PATCH': Permissions.INQUIRY_UPDATE,
+        'DELETE': Permissions.INQUIRY_DELETE,
+    }
+
     def get_permissions(self):
-        """Allow anyone to create, admin to list/view"""
-        if self.action in ["list", "retrieve", "update", "partial_update"]:
-            return [IsAdminOrStaff()]
-        return [AllowAny()]
+        if self.action == "create":
+            return [AllowAny()]
+        return [_IsAuthenticated(), MethodBasedPermission()]
 
     def create(self, request, *args, **kwargs):
         """Submit contact inquiry"""
@@ -581,13 +627,19 @@ class ApartmentInquiryViewSet(viewsets.ModelViewSet):
 
     queryset = ApartmentInquiry.objects.all()
     serializer_class = ApartmentInquirySerializer
-    permission_classes = [AllowAny]
     ordering = ["-created_at"]
 
+    permission_map = {
+        'GET': Permissions.INQUIRY_READ,
+        'PUT': Permissions.INQUIRY_UPDATE,
+        'PATCH': Permissions.INQUIRY_UPDATE,
+        'DELETE': Permissions.INQUIRY_DELETE,
+    }
+
     def get_permissions(self):
-        if self.action in ["list", "retrieve", "update", "partial_update"]:
-            return [IsAdminOrStaff()]
-        return [AllowAny()]
+        if self.action == "create":
+            return [AllowAny()]
+        return [_IsAuthenticated(), MethodBasedPermission()]
 
     def get_queryset(self):
         """Filter by apartment ID"""
@@ -820,11 +872,19 @@ class LocationViewSet(viewsets.ModelViewSet):
 
     queryset = Location.objects.all()
     serializer_class = LocationSerializer
-    permission_classes = [IsAdminOrStaff]
+    permission_classes = [_IsAuthenticated, MethodBasedPermission]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["name", "address"]
     ordering_fields = ["name", "created_at"]
     ordering = ["name"]
+
+    permission_map = {
+        'GET': Permissions.LOCATION_READ,
+        'POST': Permissions.LOCATION_CREATE,
+        'PUT': Permissions.LOCATION_UPDATE,
+        'PATCH': Permissions.LOCATION_UPDATE,
+        'DELETE': Permissions.LOCATION_DELETE,
+    }
 
     def get_queryset(self):
         """Filter by active status"""
@@ -851,11 +911,19 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
 
     queryset = InventoryItem.objects.all()
     serializer_class = InventoryItemSerializer
-    permission_classes = [IsAdminOrStaff]
+    permission_classes = [_IsAuthenticated, MethodBasedPermission]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["name", "description", "category"]
     ordering_fields = ["name", "category", "created_at"]
     ordering = ["category", "name"]
+
+    permission_map = {
+        'GET': Permissions.INVENTORY_READ,
+        'POST': Permissions.INVENTORY_CREATE,
+        'PUT': Permissions.INVENTORY_UPDATE,
+        'PATCH': Permissions.INVENTORY_UPDATE,
+        'DELETE': Permissions.INVENTORY_DELETE,
+    }
 
     def get_queryset(self):
         """Filter by category and active status"""
@@ -885,10 +953,18 @@ class LocationInventoryViewSet(viewsets.ModelViewSet):
 
     queryset = LocationInventory.objects.all()
     serializer_class = LocationInventorySerializer
-    permission_classes = [IsAdminOrStaff]
+    permission_classes = [_IsAuthenticated, MethodBasedPermission]
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ["quantity", "created_at"]
     ordering = ["location", "item"]
+
+    permission_map = {
+        'GET': Permissions.INVENTORY_READ,
+        'POST': Permissions.INVENTORY_CREATE,
+        'PUT': Permissions.INVENTORY_UPDATE,
+        'PATCH': Permissions.INVENTORY_UPDATE,
+        'DELETE': Permissions.INVENTORY_DELETE,
+    }
 
     def get_queryset(self):
         """Filter by location and item"""
@@ -916,10 +992,18 @@ class PropertyInventoryViewSet(viewsets.ModelViewSet):
     """
     queryset = PropertyInventory.objects.all()
     serializer_class = PropertyInventorySerializer
-    permission_classes = [IsAdminOrStaff]
+    permission_classes = [_IsAuthenticated, MethodBasedPermission]
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ["quantity", "created_at"]
     ordering = ["property", "item"]
+
+    permission_map = {
+        'GET': Permissions.INVENTORY_READ,
+        'POST': Permissions.INVENTORY_CREATE,
+        'PUT': Permissions.INVENTORY_UPDATE,
+        'PATCH': Permissions.INVENTORY_UPDATE,
+        'DELETE': Permissions.INVENTORY_DELETE,
+    }
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -938,10 +1022,18 @@ class ApartmentInventoryViewSet(viewsets.ModelViewSet):
     """
     queryset = ApartmentInventory.objects.all()
     serializer_class = ApartmentInventorySerializer
-    permission_classes = [IsAdminOrStaff]
+    permission_classes = [_IsAuthenticated, MethodBasedPermission]
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ["quantity", "created_at"]
     ordering = ["apartment", "item"]
+
+    permission_map = {
+        'GET': Permissions.INVENTORY_READ,
+        'POST': Permissions.INVENTORY_CREATE,
+        'PUT': Permissions.INVENTORY_UPDATE,
+        'PATCH': Permissions.INVENTORY_UPDATE,
+        'DELETE': Permissions.INVENTORY_DELETE,
+    }
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -966,12 +1058,17 @@ class InventoryMovementViewSet(viewsets.ModelViewSet):
 
     queryset = InventoryMovement.objects.all()
     serializer_class = InventoryMovementSerializer
-    permission_classes = [IsAdminOrStaff]
+    permission_classes = [_IsAuthenticated, MethodBasedPermission]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["movement_type"]
     ordering_fields = ["created_at", "quantity"]
     ordering = ["-created_at"]
     http_method_names = ["get", "post", "head", "options"]  # No update/delete for audit trail
+
+    permission_map = {
+        'GET': Permissions.INVENTORY_READ,
+        'POST': Permissions.INVENTORY_CREATE,
+    }
 
     def get_queryset(self):
         """Filter by location, item, property, apartment, and booking"""
@@ -1019,11 +1116,19 @@ class BookingDisputeViewSet(viewsets.ModelViewSet):
 
     queryset = BookingDispute.objects.all()
     serializer_class = BookingDisputeSerializer
-    permission_classes = [IsAdminOrStaff]
+    permission_classes = [_IsAuthenticated, MethodBasedPermission]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["dispute_type", "status"]
     ordering_fields = ["created_at", "resolved_at"]
     ordering = ["-created_at"]
+
+    permission_map = {
+        'GET': Permissions.BOOKING_READ,
+        'POST': Permissions.BOOKING_CREATE,
+        'PUT': Permissions.BOOKING_UPDATE,
+        'PATCH': Permissions.BOOKING_UPDATE,
+        'DELETE': Permissions.BOOKING_DELETE,
+    }
 
     def get_queryset(self):
         """Filter by booking"""
