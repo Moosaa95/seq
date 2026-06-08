@@ -40,6 +40,7 @@ class PAYMENT_METHOD_CHOICES(models.TextChoices):
     BANK_TRANSFER = "bank_transfer", "Bank Transfer"
     CASH = "cash", "Cash"
     CARD = "card", "Card"
+    POS = "pos", "POS Terminal"
 
 
 class CONTACT_SUBJECT_CHOICES(models.TextChoices):
@@ -156,9 +157,11 @@ class Apartment(ModelMixins):
     bedrooms = models.IntegerField(default=1, validators=[MinValueValidator(0)])
     bathrooms = models.IntegerField(default=1, validators=[MinValueValidator(0)])
     living_rooms = models.IntegerField(default=1, validators=[MinValueValidator(0)])
-    garages = models.IntegerField(
+    parking = models.IntegerField(
         null=True, blank=True, validators=[MinValueValidator(0)]
     )
+    is_locked = models.BooleanField(default=False, help_text="Locked for repairs or maintenance — unavailable for booking")
+    lock_reason = models.CharField(max_length=255, blank=True, null=True)
     units = models.IntegerField(
         null=True, blank=True, help_text="Number of similar units available"
     )
@@ -166,6 +169,7 @@ class Apartment(ModelMixins):
     # Description & Features
     description = models.TextField()
     amenities = models.JSONField(default=list, help_text="List of amenities")
+    house_rules = models.TextField(blank=True, null=True, help_text="House rules shown on receipt")
 
     # Management
     entity = models.CharField(
@@ -192,6 +196,8 @@ class Apartment(ModelMixins):
     def is_available(self):
         """Check if apartment is currently available"""
         if not self.is_active:
+            return False
+        if self.is_locked:
             return False
         if self.available_from and self.available_from > timezone.now().date():
             return False
@@ -236,7 +242,7 @@ class Booking(ModelMixins):
         Apartment, on_delete=models.CASCADE, related_name="bookings", null=True, blank=True
     )
     name = models.CharField(max_length=255)
-    email = models.EmailField()
+    email = models.EmailField(blank=True, null=True)
     phone = models.CharField(max_length=50)
 
     # Booking Details
@@ -264,6 +270,18 @@ class Booking(ModelMixins):
     # Additional Info
     special_requests = models.TextField(blank=True, null=True)
     cancellation_reason = models.TextField(blank=True, null=True)
+
+    # Walk-in booking fields
+    is_walk_in = models.BooleanField(default=False)
+    address = models.TextField(blank=True, null=True)
+    id_type = models.CharField(max_length=100, blank=True, null=True)
+    id_document = CloudinaryField(
+        "id_document",
+        folder="booking_ids/",
+        blank=True,
+        null=True,
+    )
+    purpose = models.TextField(blank=True, null=True)
 
     # Occupancy Tracking
     checked_in_at = models.DateTimeField(
@@ -336,6 +354,9 @@ class Payment(ModelMixins):
         choices=PAYMENT_STATUS_CHOICES.choices,
         default=PAYMENT_STATUS_CHOICES.PENDING,
     )
+
+    # Beneficiary (for walk-in cash/POS/transfer payments)
+    beneficiary_name = models.CharField(max_length=255, blank=True, null=True)
 
     # Timestamps
     paid_at = models.DateTimeField(null=True, blank=True)
@@ -544,6 +565,13 @@ class InventoryItem(ModelMixins):
     category = models.CharField(max_length=100)  # e.g., "Linens", "Kitchenware"
     unit = models.CharField(max_length=50, default="piece")  # e.g., "piece", "set"
     is_active = models.BooleanField(default=True)
+    image = CloudinaryField(
+        'image',
+        folder='inventory_items/',
+        transformation=[{'width': 400, 'height': 400, 'crop': 'limit'}],
+        blank=True,
+        null=True,
+    )
 
     class Meta:
         ordering = ["category", "name"]

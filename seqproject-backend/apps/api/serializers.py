@@ -240,10 +240,13 @@ class ApartmentSerializer(serializers.ModelSerializer):
             "bedrooms",
             "bathrooms",
             "living_rooms",
-            "garages",
+            "parking",
+            "is_locked",
+            "lock_reason",
             "units",
             "description",
             "amenities",
+            "house_rules",
             "entity",
             "agent",
             "agent_id",
@@ -361,6 +364,7 @@ class BookingSerializer(serializers.ModelSerializer):
     """Serializer for Bookings"""
     apartment_details = ApartmentListSerializer(source="apartment", read_only=True)
     apartment_id = serializers.CharField(write_only=True)
+    id_document_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Booking
@@ -385,6 +389,12 @@ class BookingSerializer(serializers.ModelSerializer):
             "checked_in_at",
             "checked_out_at",
             "occupancy_status",
+            "is_walk_in",
+            "address",
+            "id_type",
+            "id_document",
+            "id_document_url",
+            "purpose",
             "created_at",
             "updated_at",
         ]
@@ -396,9 +406,15 @@ class BookingSerializer(serializers.ModelSerializer):
             "currency",
             "checked_in_at",
             "checked_out_at",
+            "id_document_url",
             "created_at",
             "updated_at",
         ]
+
+    def get_id_document_url(self, obj):
+        if obj.id_document:
+            return obj.id_document.url
+        return None
 
     def validate(self, data):
         """Validate booking data"""
@@ -507,6 +523,7 @@ class PaymentSerializer(serializers.ModelSerializer):
             "amount",
             "currency",
             "payment_method",
+            "beneficiary_name",
             "transaction_reference",
             "gateway_response",
             "status",
@@ -672,6 +689,8 @@ class BlockedDateSerializer(serializers.ModelSerializer):
 class InventoryItemSerializer(serializers.ModelSerializer):
     """Serializer for InventoryItem model"""
 
+    image_url = serializers.SerializerMethodField()
+
     class Meta:
         model = InventoryItem
         fields = [
@@ -681,10 +700,17 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             "category",
             "unit",
             "is_active",
+            "image",
+            "image_url",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = ["id", "image_url", "created_at", "updated_at"]
+
+    def get_image_url(self, obj):
+        if obj.image:
+            return obj.image.url
+        return None
 
 
 class LocationInventorySerializer(serializers.ModelSerializer):

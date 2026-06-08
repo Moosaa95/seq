@@ -66,7 +66,7 @@ class ActivityLoggingMiddleware(MiddlewareMixin):
 
     def _create_log(self, request, response):
         """Create an activity log entry."""
-        from apps.account.models import ActivityLog
+        from account.models import ActivityLog
 
         # Extract resource type from path
         resource_type = self._extract_resource_type(request.path)

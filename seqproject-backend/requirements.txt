@@ -8,6 +8,8 @@ cloudinary==1.44.1
 cryptography==46.0.3
 defusedxml==0.7.1
 Django==4.2.29
+django-ledger==0.5.6.5
+django-treebeard==4.7.1
 django-cloudinary-storage==0.3.0
 django-cors-headers==4.9.0
 django-filter==25.1
@@ -54,3 +56,8 @@ urllib3==2.6.2
 gunicorn==23.0.0
 whitenoise
 dj-database-url==2.3.0
+# django-ledger dependencies
+faker==37.12.0
+markdown==3.9
+ofxtools==0.9.5
+text-unidecode==1.3

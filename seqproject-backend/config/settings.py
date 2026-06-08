@@ -50,10 +50,13 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "corsheaders",
     "django_filters",
+    # Third-party accounting
+    "django.contrib.humanize",
+    "django_ledger",
     # Local apps
     "api",
     "account",
-
+    "ledger",
 ]
 
 MIDDLEWARE = [
@@ -383,6 +386,18 @@ DEFAULT_FROM_EMAIL = config(
 # Admin email for receiving notifications
 ADMIN_EMAIL = config("ADMIN_EMAIL", default="info@seqprojects.com")
 
+
+# ==============================================================================
+# DJANGO LEDGER SETTINGS
+# ==============================================================================
+
+LOGIN_URL = '/admin/login/'  # required by django_ledger for redirect on unauthenticated access
+
+DJANGO_LEDGER_CURRENCY_SYMBOL = config("DJANGO_LEDGER_CURRENCY_SYMBOL", default="₦")
+DJANGO_LEDGER_SPACED_CURRENCY_SYMBOL = False
+DJANGO_LEDGER_USE_CLOSING_ENTRIES = True
+
+# ==============================================================================
 
 AUTH_ACCESS_TOKEN_NAME = "access_token"  # Name of the access token cookie
 AUTH_REFRESH_TOKEN_NAME = "refresh_token"  # Name of the refresh token cookie

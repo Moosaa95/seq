@@ -18,7 +18,8 @@ class UserRoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserRole
         fields = [
-            'id', 'name', 'description', 'permissions', 
+            'id', 'name', 'description', 'permissions',
+            'allowed_locations',
             'is_superuser_role', 'is_default', 'user_count',
             'available_permissions', 'created_at', 'updated_at'
         ]
@@ -215,7 +216,7 @@ class ResendOTPSerializer(serializers.Serializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    """Serializer for user details with role info."""
+    """Serializer for user details with role info (used by auth verify endpoint)."""
 
     role = UserRoleListSerializer(read_only=True)
     permissions = serializers.SerializerMethodField()
@@ -225,7 +226,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'email', 'first_name', 'last_name', 'date_joined',
             'is_active', 'is_staff', 'is_superuser', 'role',
-            'permissions', 'must_change_password'
+            'permissions', 'must_change_password',
         ]
         read_only_fields = ['id', 'date_joined', 'permissions', 'must_change_password']
 
@@ -235,18 +236,25 @@ class UserSerializer(serializers.ModelSerializer):
 
 class UserManagementSerializer(serializers.ModelSerializer):
     """Serializer for admin user management - full CRUD."""
-    
+
     role_details = UserRoleListSerializer(source='role', read_only=True)
     password = serializers.CharField(write_only=True, required=False, min_length=8)
+    profile_image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             'id', 'email', 'first_name', 'last_name', 'date_joined',
             'is_active', 'is_staff', 'is_superuser', 'role', 'role_details',
-            'password', 'must_change_password'
+            'password', 'must_change_password',
+            'profile_image', 'profile_image_url',
         ]
-        read_only_fields = ['id', 'date_joined', 'must_change_password']
+        read_only_fields = ['id', 'date_joined', 'must_change_password', 'profile_image_url']
+
+    def get_profile_image_url(self, obj):
+        if obj.profile_image:
+            return obj.profile_image.url
+        return None
 
     def create(self, validated_data):
         password = validated_data.pop('password', None)
@@ -324,6 +332,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 'id': str(self.user.role.id),
                 'name': self.user.role.name,
                 'is_superuser_role': self.user.role.is_superuser_role,
+                'allowed_locations': self.user.role.allowed_locations or [],
             } if self.user.role else None,
             'permissions': self.user.get_permissions(),
         }

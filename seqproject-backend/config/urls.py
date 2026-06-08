@@ -26,6 +26,8 @@ urlpatterns = [
     # API endpoints
     path("api/", include("api.urls")),
     path("api/account/", include("account.urls")),
+    # Django Ledger accounting UI
+    path("ledger/", include("django_ledger.urls", namespace="django_ledger")),
 ]
 
 # Serve media files in development

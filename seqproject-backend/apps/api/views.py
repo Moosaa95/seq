@@ -133,6 +133,11 @@ class ApartmentViewSet(viewsets.ModelViewSet):
     """
 
     queryset = Apartment.objects.filter(is_active=True)
+
+    def _is_admin_request(self):
+        """Check if request comes from authenticated admin/staff."""
+        user = getattr(self.request, 'user', None)
+        return user and user.is_authenticated
     pagination_class = StandardResultsSetPagination
 
     permission_map = {
@@ -205,7 +210,32 @@ class ApartmentViewSet(viewsets.ModelViewSet):
         if bathrooms:
             queryset = queryset.filter(bathrooms__gte=bathrooms)
 
+        # Admin requests: include locked rooms; public requests: exclude locked rooms
+        if not self._is_admin_request():
+            queryset = queryset.filter(is_locked=False)
+
         return queryset
+
+    @action(detail=True, methods=["post"])
+    def lock(self, request, pk=None):
+        """Lock an apartment for repairs/maintenance. Prevents new bookings."""
+        apartment = self.get_object()
+        reason = request.data.get("reason", "")
+        apartment.is_locked = True
+        apartment.lock_reason = reason
+        apartment.save(update_fields=["is_locked", "lock_reason"])
+        from .serializers import ApartmentSerializer
+        return Response(ApartmentSerializer(apartment, context={"request": request}).data)
+
+    @action(detail=True, methods=["post"])
+    def unlock(self, request, pk=None):
+        """Unlock a previously locked apartment."""
+        apartment = self.get_object()
+        apartment.is_locked = False
+        apartment.lock_reason = None
+        apartment.save(update_fields=["is_locked", "lock_reason"])
+        from .serializers import ApartmentSerializer
+        return Response(ApartmentSerializer(apartment, context={"request": request}).data)
 
     @action(detail=True, methods=["get"], permission_classes=[AllowAny])
     def booked_dates(self, request, pk=None):
@@ -355,7 +385,7 @@ class BookingViewSet(viewsets.ModelViewSet):
         )
 
     @action(detail=True, methods=["post"])
-    def cancel(self, request, pk=None):
+    def cancel(self, request, booking_id=None):
         """Cancel a booking"""
         booking = self.get_object()
 
@@ -385,7 +415,7 @@ class BookingViewSet(viewsets.ModelViewSet):
         )
 
     @action(detail=True, methods=["post"])
-    def check_in(self, request, pk=None):
+    def check_in(self, request, booking_id=None):
         """Record client check-in for a booking"""
         booking = self.get_object()
 
@@ -422,7 +452,57 @@ class BookingViewSet(viewsets.ModelViewSet):
         )
 
     @action(detail=True, methods=["post"])
-    def check_out(self, request, pk=None):
+    def record_walkin_payment(self, request, booking_id=None):
+        """Record a cash/POS/transfer payment for a walk-in booking"""
+        booking = self.get_object()
+
+        if not booking.is_walk_in:
+            return Response(
+                {"error": "This action is only available for walk-in bookings"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        payment_method = request.data.get("payment_method", "cash")
+        beneficiary_name = request.data.get("beneficiary_name", "")
+
+        WALK_IN_METHODS = ["cash", "pos", "bank_transfer", "card"]
+        if payment_method not in WALK_IN_METHODS:
+            return Response(
+                {"error": f"Payment method must be one of: {WALK_IN_METHODS}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        import uuid as uuid_module
+
+        payment, _ = Payment.objects.update_or_create(
+            booking=booking,
+            defaults={
+                "amount": booking.total_amount,
+                "currency": booking.currency,
+                "payment_method": payment_method,
+                "beneficiary_name": beneficiary_name,
+                "status": "successful",
+                "paid_at": timezone.now(),
+                "transaction_reference": f"WALKIN-{uuid_module.uuid4().hex[:8].upper()}",
+            },
+        )
+
+        booking.status = "confirmed"
+        booking.payment_status = "paid"
+        booking.save()
+
+        from .serializers import PaymentSerializer as PS
+        return Response(
+            {
+                "success": True,
+                "message": "Payment recorded and booking confirmed",
+                "payment": PS(payment, context={"request": request}).data,
+                "booking": BookingSerializer(booking, context={"request": request}).data,
+            }
+        )
+
+    @action(detail=True, methods=["post"])
+    def check_out(self, request, booking_id=None):
         """Record client check-out for a booking"""
         booking = self.get_object()
 
@@ -887,12 +967,21 @@ class LocationViewSet(viewsets.ModelViewSet):
     }
 
     def get_queryset(self):
-        """Filter by active status"""
+        """Filter by active status and user's allowed locations."""
         queryset = super().get_queryset()
 
         is_active = self.request.query_params.get("is_active", None)
         if is_active is not None:
             queryset = queryset.filter(is_active=is_active.lower() == "true")
+
+        # Restrict to allowed_locations on the user's role (empty list = all locations)
+        user = getattr(self.request, 'user', None)
+        if user and user.is_authenticated and not user.is_superuser:
+            role = getattr(user, 'role', None)
+            if role and not role.is_superuser_role:
+                allowed = role.allowed_locations or []
+                if allowed:
+                    queryset = queryset.filter(id__in=allowed)
 
         return queryset
 
@@ -1095,6 +1184,86 @@ class InventoryMovementViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(booking__booking_id=booking_id)
 
         return queryset
+
+    @action(detail=False, methods=["post"])
+    def transfer(self, request):
+        """
+        Atomically transfer items between storage levels.
+        Reduces stock at source and increases at destination, recording both movements.
+        """
+        from django.db import transaction as db_transaction
+        from .models import LocationInventory, PropertyInventory, ApartmentInventory
+
+        item_id = request.data.get("item_id")
+        quantity = int(request.data.get("quantity", 0))
+        reason = request.data.get("reason", "")
+        performed_by = request.data.get("performed_by", "")
+
+        from_location_id = request.data.get("from_location_id")
+        from_property_id = request.data.get("from_property_id")
+        from_apartment_id = request.data.get("from_apartment_id")
+        to_location_id = request.data.get("to_location_id")
+        to_property_id = request.data.get("to_property_id")
+        to_apartment_id = request.data.get("to_apartment_id")
+
+        if not item_id or quantity <= 0:
+            return Response({"detail": "item_id and quantity are required."}, status=400)
+
+        with db_transaction.atomic():
+            # Deduct from source
+            if from_apartment_id:
+                src = ApartmentInventory.objects.get(apartment_id=from_apartment_id, item_id=item_id)
+                if src.quantity < quantity:
+                    return Response({"detail": "Insufficient stock at source apartment."}, status=400)
+                src.quantity -= quantity
+                src.save()
+            elif from_property_id:
+                src = PropertyInventory.objects.get(property_id=from_property_id, item_id=item_id)
+                if src.quantity < quantity:
+                    return Response({"detail": "Insufficient stock at source property."}, status=400)
+                src.quantity -= quantity
+                src.save()
+            elif from_location_id:
+                src = LocationInventory.objects.get(location_id=from_location_id, item_id=item_id)
+                if src.quantity < quantity:
+                    return Response({"detail": "Insufficient stock at source location."}, status=400)
+                src.quantity -= quantity
+                src.save()
+
+            # Add to destination
+            if to_apartment_id:
+                dest, _ = ApartmentInventory.objects.get_or_create(
+                    apartment_id=to_apartment_id, item_id=item_id, defaults={"quantity": 0}
+                )
+                dest.quantity += quantity
+                dest.save()
+            elif to_property_id:
+                dest, _ = PropertyInventory.objects.get_or_create(
+                    property_id=to_property_id, item_id=item_id, defaults={"quantity": 0}
+                )
+                dest.quantity += quantity
+                dest.save()
+            elif to_location_id:
+                dest, _ = LocationInventory.objects.get_or_create(
+                    location_id=to_location_id, item_id=item_id,
+                    defaults={"quantity": 0, "min_threshold": 0}
+                )
+                dest.quantity += quantity
+                dest.save()
+
+            # Record movement
+            movement = InventoryMovement.objects.create(
+                item_id=item_id,
+                location_id=from_location_id or to_location_id,
+                property_id=to_property_id or from_property_id,
+                apartment_id=to_apartment_id or from_apartment_id,
+                movement_type="transferred",
+                quantity=quantity,
+                reason=reason,
+                performed_by=performed_by,
+            )
+
+        return Response(InventoryMovementSerializer(movement, context={"request": request}).data, status=201)
 
 
 # =============================================================================

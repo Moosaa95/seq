@@ -4,6 +4,7 @@ from django.utils import timezone
 from datetime import timedelta
 from commons.mixins import ModelMixins
 from apps.account.managers import CustomUserManager
+from cloudinary.models import CloudinaryField
 
 
 class UserRole(ModelMixins):
@@ -24,8 +25,13 @@ class UserRole(ModelMixins):
     is_default = models.BooleanField(
         default=False, help_text="If true, this role is assigned to new users by default"
     )
+    allowed_locations = models.JSONField(
+        default=list,
+        help_text="List of location IDs this role can access. Empty = access all locations (when location:read is granted).",
+    )
 
     class Meta:
+        app_label = 'account'
         ordering = ["name"]
         verbose_name = "User Role"
         verbose_name_plural = "User Roles"
@@ -73,11 +79,21 @@ class CustomUser(AbstractBaseUser, PermissionsMixin, ModelMixins):
         default=False,
         help_text="If true, user must change password on next login",
     )
+    profile_image = CloudinaryField(
+        'profile_image',
+        folder='user_avatars/',
+        transformation=[{'width': 200, 'height': 200, 'crop': 'fill', 'gravity': 'face'}],
+        blank=True,
+        null=True,
+    )
 
     objects = CustomUserManager()
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["first_name", "last_name"]
+
+    class Meta:
+        app_label = 'account'
 
     def __str__(self):
         return f"{self.email}"
@@ -94,6 +110,11 @@ class CustomUser(AbstractBaseUser, PermissionsMixin, ModelMixins):
         Return the short name for the user (first name).
         """
         return self.first_name if self.first_name else self.email
+
+    @property
+    def username(self):
+        """Alias for compatibility with third-party packages that expect username."""
+        return self.email
 
     def has_permission(self, permission):
         """Check if user has a specific permission."""
@@ -268,6 +289,7 @@ class ActivityLog(ModelMixins):
     status_code = models.IntegerField(null=True, blank=True)
 
     class Meta:
+        app_label = 'account'
         ordering = ["-created_at"]
         verbose_name = "Activity Log"
         verbose_name_plural = "Activity Logs"
