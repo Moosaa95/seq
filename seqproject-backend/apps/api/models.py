@@ -185,7 +185,7 @@ class Apartment(ModelMixins):
     available_from = models.DateField(null=True, blank=True)
 
     class Meta:
-        ordering = ["-featured", "-created_at"]
+        ordering = ["-featured", "title"]
         verbose_name_plural = "Apartments"
 
     def __str__(self):

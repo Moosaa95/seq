@@ -229,11 +229,20 @@ class ApartmentViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def unlock(self, request, pk=None):
-        """Unlock a previously locked apartment."""
+        """Unlock a previously locked apartment and re-sync its external calendars."""
         apartment = self.get_object()
         apartment.is_locked = False
         apartment.lock_reason = None
         apartment.save(update_fields=["is_locked", "lock_reason"])
+
+        # Trigger calendar sync in background so Airbnb/Booking.com blocked dates
+        # are refreshed as soon as the apartment becomes available again.
+        try:
+            from .tasks import sync_apartment_calendars
+            sync_apartment_calendars.delay(apartment.id)
+        except Exception:
+            pass  # Celery may not be running locally; sync will happen on next scheduled run
+
         from .serializers import ApartmentSerializer
         return Response(ApartmentSerializer(apartment, context={"request": request}).data)
 
