@@ -462,7 +462,11 @@ class BookingViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def record_walkin_payment(self, request, booking_id=None):
-        """Record a cash/POS/transfer payment for a walk-in booking"""
+        """Record a cash/POS/transfer payment for a walk-in booking (supports partial payments and discounts)"""
+        from decimal import Decimal
+        from django.db.models import Sum
+        import uuid as uuid_module
+
         booking = self.get_object()
 
         if not booking.is_walk_in:
@@ -473,6 +477,11 @@ class BookingViewSet(viewsets.ModelViewSet):
 
         payment_method = request.data.get("payment_method", "cash")
         beneficiary_name = request.data.get("beneficiary_name", "")
+        payment_notes = request.data.get("notes", "") or ""
+        payment_due_date = request.data.get("payment_due_date") or None
+        discount_type = request.data.get("discount_type", "none")
+        discount_value = Decimal(str(request.data.get("discount_value", 0) or 0))
+        discount_reason = request.data.get("discount_reason", "") or ""
 
         WALK_IN_METHODS = ["cash", "pos", "bank_transfer", "card"]
         if payment_method not in WALK_IN_METHODS:
@@ -481,34 +490,88 @@ class BookingViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        import uuid as uuid_module
+        # Persist discount on booking if provided
+        if discount_type != "none" and discount_value > 0:
+            booking.discount_type = discount_type
+            booking.discount_value = discount_value
+            booking.discount_reason = discount_reason
 
-        payment, _ = Payment.objects.update_or_create(
+        effective_total = booking.effective_total
+
+        # Amount being paid now
+        amount_raw = request.data.get("amount")
+        if amount_raw is not None:
+            amount_now = Decimal(str(amount_raw))
+        else:
+            amount_now = effective_total
+
+        # Clamp to remaining balance
+        already_paid = booking.payments.filter(status="successful").aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0")
+        balance = effective_total - already_paid
+        amount_now = min(max(amount_now, Decimal("0")), balance)
+
+        if amount_now <= 0:
+            return Response(
+                {"error": "No balance remaining on this booking"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        payment = Payment.objects.create(
             booking=booking,
-            defaults={
-                "amount": booking.total_amount,
-                "currency": booking.currency,
-                "payment_method": payment_method,
-                "beneficiary_name": beneficiary_name,
-                "status": "successful",
-                "paid_at": timezone.now(),
-                "transaction_reference": f"WALKIN-{uuid_module.uuid4().hex[:8].upper()}",
-            },
+            amount=amount_now,
+            currency=booking.currency,
+            payment_method=payment_method,
+            beneficiary_name=beneficiary_name,
+            notes=payment_notes or None,
+            status="successful",
+            paid_at=timezone.now(),
+            transaction_reference=f"WALKIN-{uuid_module.uuid4().hex[:8].upper()}",
         )
 
+        total_paid = already_paid + amount_now
+        if total_paid >= effective_total:
+            booking.payment_status = "paid"
+            booking.payment_due_date = None
+        else:
+            booking.payment_status = "partial"
+            if payment_due_date:
+                booking.payment_due_date = payment_due_date
         booking.status = "confirmed"
-        booking.payment_status = "paid"
         booking.save()
+
+        balance_remaining = float(effective_total - total_paid)
 
         from .serializers import PaymentSerializer as PS
         return Response(
             {
                 "success": True,
-                "message": "Payment recorded and booking confirmed",
+                "message": "Payment fully recorded" if balance_remaining <= 0 else f"Partial payment recorded — balance: {booking.currency}{balance_remaining:,.0f}",
                 "payment": PS(payment, context={"request": request}).data,
                 "booking": BookingSerializer(booking, context={"request": request}).data,
+                "amount_paid_now": float(amount_now),
+                "total_paid": float(total_paid),
+                "effective_total": float(effective_total),
+                "balance_remaining": balance_remaining,
             }
         )
+
+    @action(detail=True, methods=["get"])
+    def payments(self, request, booking_id=None):
+        """List all payment records for a booking"""
+        booking = self.get_object()
+        from .serializers import PaymentSerializer as PS
+        qs = booking.payments.all().order_by("created_at")
+        return Response({
+            "booking_id": str(booking.booking_id),
+            "effective_total": float(booking.effective_total),
+            "amount_paid": float(booking.amount_paid),
+            "balance_remaining": float(booking.balance_remaining),
+            "payment_status": booking.payment_status,
+            "payment_due_date": str(booking.payment_due_date) if booking.payment_due_date else None,
+            "payments": PS(qs, many=True, context={"request": request}).data,
+        })
 
     @action(detail=True, methods=["post"])
     def check_out(self, request, booking_id=None):
@@ -889,6 +952,7 @@ class BlockedDateViewSet(viewsets.ModelViewSet):
     queryset = BlockedDate.objects.all()
     serializer_class = BlockedDateSerializer
     permission_classes = [IsAdminOrStaff]
+    pagination_class = StandardResultsSetPagination
     ordering = ["start_date"]
 
     def get_queryset(self):

@@ -365,6 +365,10 @@ class BookingSerializer(serializers.ModelSerializer):
     apartment_details = ApartmentListSerializer(source="apartment", read_only=True)
     apartment_id = serializers.CharField(write_only=True)
     id_document_url = serializers.SerializerMethodField()
+    discount_amount = serializers.ReadOnlyField()
+    effective_total = serializers.ReadOnlyField()
+    amount_paid = serializers.ReadOnlyField()
+    balance_remaining = serializers.ReadOnlyField()
 
     class Meta:
         model = Booking
@@ -384,6 +388,14 @@ class BookingSerializer(serializers.ModelSerializer):
             "currency",
             "status",
             "payment_status",
+            "discount_type",
+            "discount_value",
+            "discount_reason",
+            "discount_amount",
+            "effective_total",
+            "amount_paid",
+            "balance_remaining",
+            "payment_due_date",
             "special_requests",
             "cancellation_reason",
             "checked_in_at",
@@ -407,6 +419,10 @@ class BookingSerializer(serializers.ModelSerializer):
             "checked_in_at",
             "checked_out_at",
             "id_document_url",
+            "discount_amount",
+            "effective_total",
+            "amount_paid",
+            "balance_remaining",
             "created_at",
             "updated_at",
         ]
@@ -524,6 +540,7 @@ class PaymentSerializer(serializers.ModelSerializer):
             "currency",
             "payment_method",
             "beneficiary_name",
+            "notes",
             "transaction_reference",
             "gateway_response",
             "status",
