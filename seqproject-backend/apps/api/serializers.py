@@ -7,6 +7,7 @@ from .models import (
     Apartment,
     ApartmentImage,
     Booking,
+    GuestProfile,
     Payment,
     ContactInquiry,
     ApartmentInquiry,
@@ -472,7 +473,7 @@ class BookingSerializer(serializers.ModelSerializer):
                     if self.instance.apartment_id == apartment_id:
                         # Re-check excluding this booking
                         other_bookings = Booking.objects.filter(
-                            apartment_id=apartment_id, status__in=["pending", "confirmed"]
+                            apartment_id=apartment_id, status__in=["confirmed"]
                         ).filter(check_in__lt=check_out, check_out__gt=check_in).exclude(pk=self.instance.pk)
 
                         # Check blocked dates
@@ -521,6 +522,13 @@ class BookingSerializer(serializers.ModelSerializer):
         )
 
         return booking
+
+
+class GuestProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GuestProfile
+        fields = ['id', 'name', 'email', 'phone', 'address', 'id_type', 'notes', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 
 class PaymentSerializer(serializers.ModelSerializer):

@@ -360,6 +360,25 @@ class Booking(ModelMixins):
                 raise ValidationError("Check-in date cannot be in the past")
 
 
+class GuestProfile(ModelMixins):
+    """Saved customer details for quick booking lookup by admin."""
+    name = models.CharField(max_length=255)
+    email = models.EmailField(blank=True, null=True)
+    phone = models.CharField(max_length=50, blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    id_type = models.CharField(max_length=50, blank=True, null=True)
+    notes = models.TextField(blank=True, null=True)
+    # user FK intentionally omitted here — will be linked when customer login is built
+
+    class Meta:
+        ordering = ['name']
+        verbose_name_plural = 'Guest Profiles'
+
+    def __str__(self):
+        contact = self.phone or self.email or 'no contact'
+        return f"{self.name} ({contact})"
+
+
 class Payment(ModelMixins):
     """Payment transactions"""
 

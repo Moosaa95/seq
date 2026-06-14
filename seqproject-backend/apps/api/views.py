@@ -11,7 +11,7 @@ from django.utils.decorators import method_decorator
 import json
 
 from .models import (
-    Property, Apartment, ApartmentImage, PropertyImage, Booking, Payment, 
+    Property, Apartment, ApartmentImage, PropertyImage, Booking, GuestProfile, Payment,
     ContactInquiry, ApartmentInquiry, Agent,
     ExternalCalendar, BlockedDate, Location, InventoryItem, LocationInventory,
     PropertyInventory, ApartmentInventory, InventoryMovement, BookingDispute,
@@ -25,6 +25,7 @@ from .serializers import (
     ApartmentImageSerializer,
     PropertyImageSerializer,
     BookingSerializer,
+    GuestProfileSerializer,
     PaymentSerializer,
     ContactInquirySerializer,
     ApartmentInquirySerializer,
@@ -315,6 +316,33 @@ class ApartmentViewSet(viewsets.ModelViewSet):
             )
 
 
+class GuestProfileViewSet(viewsets.ModelViewSet):
+    """
+    Admin-only CRM for saved customer details.
+    GET  /api/guest-profiles/?search=<name|email|phone>  — autocomplete lookup
+    POST /api/guest-profiles/                            — manual create
+    PATCH/DELETE /api/guest-profiles/:id/               — edit / remove
+    """
+    serializer_class = GuestProfileSerializer
+    permission_classes = [_IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'email', 'phone']
+    ordering_fields = ['name', 'created_at']
+    ordering = ['name']
+
+    def get_queryset(self):
+        qs = GuestProfile.objects.all()
+        q = self.request.query_params.get('search', '').strip()
+        if q:
+            qs = qs.filter(
+                Q(name__icontains=q) | Q(email__icontains=q) | Q(phone__icontains=q)
+            )
+        # Cap autocomplete results; full list is still available without search param
+        if q:
+            qs = qs[:20]
+        return qs
+
+
 class BookingViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Booking management.
@@ -369,6 +397,12 @@ class BookingViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         booking = serializer.save()
+
+        # Walk-in bookings are created by admin in person — auto-confirm immediately
+        # so the dates are properly locked and the booking doesn't float as pending.
+        if booking.is_walk_in and booking.status == 'pending':
+            booking.status = 'confirmed'
+            booking.save(update_fields=['status'])
 
         # Send booking confirmation emails
         try:

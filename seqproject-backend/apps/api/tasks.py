@@ -1,7 +1,33 @@
 from celery import shared_task
+from datetime import timedelta
+from django.utils import timezone
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+@shared_task
+def expire_pending_bookings():
+    """
+    Auto-cancel online pending bookings that have received no payment within 24 hours.
+    Walk-in bookings are excluded — admin creates those in person and they are
+    auto-confirmed at creation time, so this task will never touch them.
+    """
+    from .models import Booking
+    cutoff = timezone.now() - timedelta(hours=24)
+    expired_qs = Booking.objects.filter(
+        status='pending',
+        is_walk_in=False,
+        created_at__lt=cutoff,
+    )
+    count = expired_qs.count()
+    if count:
+        expired_qs.update(
+            status='cancelled',
+            cancellation_reason='Automatically expired: no payment received within 24 hours',
+        )
+        logger.info('Auto-expired %d pending online bookings', count)
+    return {'expired': count}
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)

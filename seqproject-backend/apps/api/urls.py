@@ -8,6 +8,7 @@ router = DefaultRouter()
 # Register all ViewSets
 router.register(r'properties', views.PropertyViewSet, basename='property')
 router.register(r'apartments', views.ApartmentViewSet, basename='apartment')
+router.register(r'guest-profiles', views.GuestProfileViewSet, basename='guest-profile')
 router.register(r'bookings', views.BookingViewSet, basename='booking')
 router.register(r'payments', views.PaymentViewSet, basename='payment')
 router.register(r'contact-inquiries', views.ContactInquiryViewSet, basename='contact-inquiry')

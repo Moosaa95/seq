@@ -15,4 +15,9 @@ app.conf.beat_schedule = {
         "task": "api.tasks.sync_all_calendars",
         "schedule": crontab(minute="*/30"),
     },
+    # Cancel pending online bookings with no payment after 24 hours
+    "expire-pending-bookings": {
+        "task": "api.tasks.expire_pending_bookings",
+        "schedule": crontab(minute=0, hour="*/1"),  # every hour
+    },
 }

@@ -239,6 +239,19 @@ Payment Status: {booking.payment_status}
                     errors.append(f"Error processing event: {str(e)}")
                     continue
 
+            # Remove stale BlockedDates whose events are no longer in the feed
+            # (handles cancelled Airbnb/external bookings)
+            seen_uids = {str(ev.get('uid', '')) for ev in events if ev.get('uid')}
+            if seen_uids:
+                stale_qs = BlockedDate.objects.filter(
+                    apartment=external_calendar.apartment,
+                    external_calendar=external_calendar,
+                ).exclude(source_booking_id__in=seen_uids)
+            else:
+                stale_qs = BlockedDate.objects.none()
+            blocked_dates_removed = stale_qs.count()
+            stale_qs.delete()
+
             # Update last sync time
             external_calendar.last_synced = timezone.now()
             external_calendar.sync_errors = None
@@ -248,6 +261,7 @@ Payment Status: {booking.payment_status}
                 'success': True,
                 'created': blocked_dates_created,
                 'updated': blocked_dates_updated,
+                'removed': blocked_dates_removed,
                 'total_events': len(events),
                 'errors': errors
             }
@@ -311,10 +325,11 @@ Payment Status: {booking.payment_status}
         Returns:
             True if available, False if blocked
         """
-        # Check regular bookings
+        # Only confirmed bookings block dates — pending bookings auto-expire
+        # and should not permanently block availability.
         overlapping_bookings = Booking.objects.filter(
             apartment=apartment_obj,
-            status__in=['pending', 'confirmed']
+            status__in=['confirmed']
         ).filter(
             check_in__lt=check_out,
             check_out__gt=check_in
