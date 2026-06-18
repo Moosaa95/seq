@@ -32,6 +32,8 @@ router.register(r'disputes', views.BookingDisputeViewSet, basename='dispute')
 
 app_name = 'api'
 
+_booking_vs = views.BookingViewSet
+
 urlpatterns = [
     # Health check endpoint
     path('health/', views.health_check, name='health-check'),
@@ -44,6 +46,10 @@ urlpatterns = [
 
     # Calendar sync endpoint
     path('calendars/sync-all/', views.sync_all_calendars, name='sync-all-calendars'),
+
+    # Booking payment sub-routes (explicit paths so they aren't shadowed by the top-level payments/ ViewSet)
+    path('bookings/<str:booking_id>/payments/', _booking_vs.as_view({'get': 'payments'}), name='booking-payments'),
+    path('bookings/<str:booking_id>/record_walkin_payment/', _booking_vs.as_view({'post': 'record_walkin_payment'}), name='booking-record-walkin-payment'),
 
     # Router URLs (all ViewSets)
     path('', include(router.urls)),
