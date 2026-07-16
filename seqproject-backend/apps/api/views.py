@@ -240,7 +240,7 @@ class ApartmentViewSet(viewsets.ModelViewSet):
         # are refreshed as soon as the apartment becomes available again.
         try:
             from .tasks import sync_apartment_calendars
-            sync_apartment_calendars.delay(apartment.id)
+            sync_apartment_calendars.delay(apartment.id)  # type: ignore
         except Exception:
             pass  # Celery may not be running locally; sync will happen on next scheduled run
 
@@ -331,16 +331,22 @@ class GuestProfileViewSet(viewsets.ModelViewSet):
     ordering = ['name']
 
     def get_queryset(self):
-        qs = GuestProfile.objects.all()
-        q = self.request.query_params.get('search', '').strip()
-        if q:
-            qs = qs.filter(
-                Q(name__icontains=q) | Q(email__icontains=q) | Q(phone__icontains=q)
-            )
-        # Cap autocomplete results; full list is still available without search param
-        if q:
-            qs = qs[:20]
-        return qs
+        return GuestProfile.objects.all()
+
+    def get_paginate_by(self):
+        # Return up to 20 results for autocomplete searches
+        if self.request.query_params.get('search'):
+            return 20
+        return None
+
+    def list(self, request, *args, **kwargs):
+        # For autocomplete (search param present), cap results at 20 without full pagination wrapper
+        queryset = self.filter_queryset(self.get_queryset())
+        if request.query_params.get('search'):
+            queryset = queryset[:20]
+            serializer = self.get_serializer(queryset, many=True)
+            return Response({'results': serializer.data, 'count': len(serializer.data)})
+        return super().list(request, *args, **kwargs)
 
 
 class BookingViewSet(viewsets.ModelViewSet):
@@ -356,6 +362,7 @@ class BookingViewSet(viewsets.ModelViewSet):
 
     queryset = Booking.objects.all()
     serializer_class = BookingSerializer
+    pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["status", "payment_status"]
     ordering_fields = ["created_at", "check_in", "check_out"]
@@ -1316,7 +1323,7 @@ class InventoryMovementViewSet(viewsets.ModelViewSet):
         if not item_id or quantity <= 0:
             return Response({"detail": "item_id and quantity are required."}, status=400)
 
-        with db_transaction.atomic():
+        with db_transaction.atomic():  # type: ignore
             # Deduct from source
             if from_apartment_id:
                 src = ApartmentInventory.objects.get(apartment_id=from_apartment_id, item_id=item_id)

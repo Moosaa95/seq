@@ -13,27 +13,30 @@ class ApiConfig(AppConfig):
         @receiver(post_save, sender=Booking)
         def sync_guest_profile(sender, instance, created, **kwargs):
             """Auto-create or update a GuestProfile whenever a booking is saved."""
-            if not created:
-                return
             try:
                 profile = None
                 if instance.email:
                     profile = GuestProfile.objects.filter(email__iexact=instance.email).first()
                 if not profile and instance.phone:
                     profile = GuestProfile.objects.filter(phone=instance.phone).first()
+                if not profile and instance.name:
+                    profile = GuestProfile.objects.filter(name__iexact=instance.name).first()
 
                 if profile:
                     changed = False
                     if instance.name and profile.name != instance.name:
                         profile.name = instance.name
                         changed = True
-                    if instance.phone and not profile.phone:
+                    if instance.email and profile.email != instance.email:
+                        profile.email = instance.email
+                        changed = True
+                    if instance.phone and profile.phone != instance.phone:
                         profile.phone = instance.phone
                         changed = True
-                    if getattr(instance, 'address', None) and not profile.address:
+                    if getattr(instance, 'address', None) and profile.address != instance.address:
                         profile.address = instance.address
                         changed = True
-                    if getattr(instance, 'id_type', None) and not profile.id_type:
+                    if getattr(instance, 'id_type', None) and profile.id_type != instance.id_type:
                         profile.id_type = instance.id_type
                         changed = True
                     if changed:

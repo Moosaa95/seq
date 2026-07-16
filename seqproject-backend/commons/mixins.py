@@ -4,6 +4,13 @@ import uuid
 
 class ModelMixins(models.Model):
     """Common fields for all models"""
+    objects = models.Manager()
+
+    class DoesNotExist(Exception):
+        pass
+
+    class MultipleObjectsReturned(Exception):
+        pass
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
