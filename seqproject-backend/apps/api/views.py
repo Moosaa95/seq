@@ -254,10 +254,14 @@ class ApartmentViewSet(viewsets.ModelViewSet):
         """
         apartment_obj = self.get_object()
         
-        # Get confirmed bookings
+        # Only confirmed bookings actually block dates (see
+        # ICalService.check_availability_with_blocked_dates, the source of
+        # truth used when a booking is created). Pending bookings are
+        # unconfirmed/unpaid and auto-expire, so they must not make a free
+        # date look booked to guests or admins.
         bookings = Booking.objects.filter(
             apartment=apartment_obj,
-            status__in=["confirmed", "pending", "completed"]
+            status="confirmed"
         ).values("check_in", "check_out")
 
         # Get blocked dates
